@@ -2,14 +2,13 @@ services:
   - type: web
     name: distributed-minecraft
     env: docker
-    plan: free  # FREE TIER - no disks allowed
-    dockerfilePath: ./Dockerfile
+    plan: free
+    dockerComposePath: ./docker-compose.yml  # Changed from dockerfilePath
     envVars:
       - key: APP_URL
-        sync: false
-      - key: RENDER_EXTERNAL_URL  
-        sync: false
+        generateValue: true  # Render will generate this
+      - key: RENDER_EXTERNAL_URL
+        sync: false  # Will be auto-filled by Render
     healthCheckPath: /health
     numInstances: 1
     autoDeploy: true
-    # NO disk section - not allowed in free tier
