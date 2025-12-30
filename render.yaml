@@ -1,19 +1,15 @@
 services:
-  # Main Distributed Minecraft Service
   - type: web
     name: distributed-minecraft
     env: docker
-    plan: free
+    plan: free  # FREE TIER - no disks allowed
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_URL
         sync: false
-      - key: RENDER_EXTERNAL_URL
+      - key: RENDER_EXTERNAL_URL  
         sync: false
     healthCheckPath: /health
     numInstances: 1
     autoDeploy: true
-    disk:
-      name: minecraft-data
-      mountPath: /data
-      sizeGB: 1
+    # NO disk section - not allowed in free tier
