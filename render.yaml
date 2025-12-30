@@ -3,12 +3,12 @@ services:
     name: distributed-minecraft
     env: docker
     plan: free
-    dockerComposePath: ./docker-compose.yml  # Changed from dockerfilePath
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_URL
-        generateValue: true  # Render will generate this
+        generateValue: true
       - key: RENDER_EXTERNAL_URL
-        sync: false  # Will be auto-filled by Render
+        sync: false
     healthCheckPath: /health
     numInstances: 1
     autoDeploy: true
