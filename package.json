@@ -1,17 +1,17 @@
 {
-  "name": "firebase-vps-terminal",
+  "name": "firebase-terminal-vps",
   "version": "1.0.0",
-  "description": "Turn Firebase Cloud Shell into a 24/7 Root VPS",
-  "main": "firebase-vps-creator.js",
-  "bin": {
-    "vps": "./firebase-vps-creator.js"
-  },
+  "description": "Create Linux VPS instances in Firebase Cloud Shell",
+  "main": "vps-creator.js",
   "scripts": {
-    "start": "node firebase-vps-creator.js",
-    "vps": "node firebase-vps-creator.js"
+    "start": "node vps-creator.js",
+    "vps": "node vps-creator.js",
+    "create": "node -e \"const {TerminalVPSCreator} = require('./vps-creator.js'); new TerminalVPSCreator().runCommand('create')\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=12.0.0"
   }
 }
