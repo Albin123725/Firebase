@@ -24,21 +24,12 @@ USERNAME="ubuntu"
 PASSWORD="ubuntu"
 SWAP_SIZE=4G
 
-# Firebase Environment Detection (safe check)
-IS_FIREBASE=0
-if [ -n "${GOOGLE_CLOUD_PROJECT:-}" ] || 
-   [ -n "${FIREBASE_ENVIRONMENT:-}" ] || 
-   hostname 2>/dev/null | grep -q "codespaces\|gitpod\|firebase" ||
-   [ -f "/.firebaseconfig" ] || 
-   [ -d "/home/firebase" ] ||
-   whoami | grep -q "firebase"; then
-    IS_FIREBASE=1
-    echo "[INFO] Firebase/Cloud environment detected"
-fi
-
 # ALBIN Banner Display
 show_banner() {
     clear
+    # Set terminal size for better display (Putty-like 80x24)
+    printf '\033[8;24;80t' 2>/dev/null || true
+    
     echo "╔══════════════════════════════════════════════════════════╗"
     echo "║                                                          ║"
     echo "║   █████╗ ██╗     ██████╗ ██╗███╗   ██╗                  ║"
@@ -50,15 +41,17 @@ show_banner() {
     echo "║                                                          ║"
     echo "║           QEMU-freeroot VPS Manager v2.0                 ║"
     echo "║               Firebase Edition - 24/7 Mode               ║"
+    echo "║                    TMATE SSH Included!                   ║"
     echo "║                                                          ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
 }
 
-# Firebase-compatible service management
+# Firebase-compatible service management with TMATE
 firebase_service() {
     PID_FILE="$HOME/.qemu-freeroot.pid"
     LOG_FILE="$HOME/.qemu-freeroot.log"
+    TMATE_FILE="$HOME/.qemu-tmate.url"
     
     case "$1" in
         start)
@@ -66,17 +59,61 @@ firebase_service() {
                 pid=$(cat "$PID_FILE")
                 if kill -0 "$pid" 2>/dev/null; then
                     echo "[INFO] VM is already running (PID: $pid)"
+                    # Check if tmate URL exists
+                    if [ -f "$TMATE_FILE" ]; then
+                        echo ""
+                        echo "════════════════════ TMATE SSH URL ════════════════════"
+                        cat "$TMATE_FILE"
+                        echo "═══════════════════════════════════════════════════════"
+                        echo ""
+                    fi
                     return 0
                 fi
             fi
             
             echo "[INFO] Starting VM in 24/7 Firebase background mode..."
+            echo "[INFO] This will take 2-3 minutes for first boot..."
+            
+            # Start VM in background
             nohup bash "$0" --background > "$LOG_FILE" 2>&1 &
-            echo $! > "$PID_FILE"
-            echo "[SUCCESS] VM started in 24/7 mode (PID: $!)"
-            echo "[INFO] SSH: ssh $USERNAME@localhost -p $SSH_PORT"
+            VM_PID=$!
+            echo $VM_PID > "$PID_FILE"
+            
+            echo "[SUCCESS] VM started in 24/7 mode (PID: $VM_PID)"
+            echo "[INFO] Waiting for VM to boot and setting up TMATE..."
+            
+            # Wait for VM to boot (3 minutes for first boot)
+            for i in {1..180}; do
+                echo -ne "\r⏳ Booting VM: $i/180 seconds..."
+                sleep 1
+            done
+            echo ""
+            
+            # Try to get tmate URL
+            setup_tmate_access
+            
+            echo ""
+            echo "════════════════════ ACCESS YOUR 24/7 VM ════════════════════"
+            echo "1. Direct SSH: ssh $USERNAME@localhost -p $SSH_PORT"
+            echo "   Password: $PASSWORD"
+            if [ -f "$TMATE_FILE" ]; then
+                echo ""
+                echo "2. TMATE PERSISTENT ACCESS (Works even after closing browser):"
+                cat "$TMATE_FILE"
+                echo ""
+                echo "⚠️  SAVE THIS TMATE URL SOMEWHERE SAFE!"
+                echo "⚠️  Use it to access VM from ANYWHERE, ANYTIME!"
+            else
+                echo ""
+                echo "⚠️  TMATE setup failed. Use direct SSH above."
+            fi
+            echo "═══════════════════════════════════════════════════════════════"
+            echo ""
+            echo "[INFO] VM is now running 24/7!"
+            echo "[INFO] Close browser anytime - VM keeps running"
             echo "[INFO] Logs: tail -f $LOG_FILE"
             ;;
+            
         stop)
             if [ -f "$PID_FILE" ]; then
                 pid=$(cat "$PID_FILE")
@@ -85,8 +122,10 @@ firebase_service() {
                 echo "[INFO] Stopped background VM (PID: $pid)"
             fi
             pkill -f "qemu-system-x86_64" 2>/dev/null || true
+            rm -f "$TMATE_FILE" 2>/dev/null || true
             echo "[SUCCESS] All VM instances stopped"
             ;;
+            
         status)
             if [ -f "$PID_FILE" ]; then
                 pid=$(cat "$PID_FILE")
@@ -95,7 +134,12 @@ firebase_service() {
                     echo "[INFO]   SSH Port: $SSH_PORT"
                     echo "[INFO]   Username: $USERNAME"
                     echo "[INFO]   Password: $PASSWORD"
-                    echo "[INFO]   Log file: $LOG_FILE"
+                    if [ -f "$TMATE_FILE" ]; then
+                        echo ""
+                        echo "════════════════════ TMATE PERSISTENT URL ════════════════════"
+                        cat "$TMATE_FILE"
+                        echo "═══════════════════════════════════════════════════════════════"
+                    fi
                     return 0
                 else
                     echo "[INFO] ❌ VM is not running (stale PID file)"
@@ -109,17 +153,112 @@ firebase_service() {
                 fi
             fi
             ;;
+            
+        tmate)
+            if [ -f "$TMATE_FILE" ]; then
+                echo "════════════════════ TMATE PERSISTENT URL ════════════════════"
+                cat "$TMATE_FILE"
+                echo "═══════════════════════════════════════════════════════════════"
+                echo ""
+                echo "To connect from ANY terminal:"
+                echo "  ssh [CODE_FROM_ABOVE]@sg.tmate.io"
+                echo ""
+                echo "Web interface also available at:"
+                echo "  https://tmate.io/t/[YOUR_CODE]"
+            else
+                echo "[INFO] No tmate URL found. Starting tmate setup..."
+                setup_tmate_access
+            fi
+            ;;
+            
         logs)
             if [ -f "$LOG_FILE" ]; then
-                tail -f "$LOG_FILE"
+                # Use less for better viewing with Putty-like size
+                printf '\033[8;40;120t' 2>/dev/null || true
+                less -R +G "$LOG_FILE"
             else
                 echo "[INFO] No log file found"
             fi
             ;;
+            
         *)
-            echo "Usage: $0 --service [start|stop|status|logs]"
+            echo "Usage: $0 --service [start|stop|status|tmate|logs]"
             ;;
     esac
+}
+
+# Setup tmate access inside VM
+setup_tmate_access() {
+    TMATE_FILE="$HOME/.qemu-tmate.url"
+    echo "[INFO] Attempting to setup TMATE persistent access..."
+    
+    # Try SSH into VM to install tmate
+    for attempt in {1..10}; do
+        if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+               -o PasswordAuthentication=yes \
+               "$USERNAME@localhost" -p "$SSH_PORT" \
+               "echo 'SSH test successful'" 2>/dev/null; then
+            
+            echo "[INFO] SSH connection successful! Setting up TMATE..."
+            
+            # Install tmate inside VM
+            ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                -o PasswordAuthentication=yes \
+                "$USERNAME@localhost" -p "$SSH_PORT" \
+                "sudo apt-get update >/dev/null 2>&1 && \
+                 sudo apt-get install -y tmate >/dev/null 2>&1 && \
+                 echo 'TMATE installed successfully'" 2>/dev/null || true
+            
+            # Start tmate and capture URL
+            echo "[INFO] Starting TMATE session (this takes 10-20 seconds)..."
+            
+            # Use screen to run tmate and capture output
+            ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                -o PasswordAuthentication=yes \
+                "$USERNAME@localhost" -p "$SSH_PORT" \
+                "cd /tmp && \
+                 timeout 30 tmate -F 2>&1 | grep -o 'ssh [a-zA-Z0-9]*@[a-z]*\.tmate\.io' | head -1" > "$TMATE_FILE.tmp" 2>/dev/null
+            
+            if [ -s "$TMATE_FILE.tmp" ]; then
+                mv "$TMATE_FILE.tmp" "$TMATE_FILE"
+                echo "[SUCCESS] TMATE URL captured!"
+                return 0
+            fi
+            
+            # Alternative method
+            echo "[INFO] Trying alternative TMATE method..."
+            ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                -o PasswordAuthentication=yes \
+                "$USERNAME@localhost" -p "$SSH_PORT" \
+                "cd /tmp && echo '#!/bin/bash
+                 tmate -S /tmp/tmate.sock new-session -d
+                 sleep 5
+                 tmate -S /tmp/tmate.sock display -p \"# \" 2>/dev/null | \
+                 grep -o \"ssh [a-zA-Z0-9]*@[a-z]*\\\\.tmate\\\\.io\"' > /tmp/start_tmate.sh && \
+                 chmod +x /tmp/start_tmate.sh && \
+                 /tmp/start_tmate.sh" > "$TMATE_FILE.tmp" 2>/dev/null
+            
+            if grep -q "ssh.*@.*\.tmate\.io" "$TMATE_FILE.tmp" 2>/dev/null; then
+                grep -o "ssh.*@.*\.tmate\.io" "$TMATE_FILE.tmp" | head -1 > "$TMATE_FILE"
+                echo "[SUCCESS] TMATE URL captured (alternative method)!"
+                return 0
+            fi
+            
+            break
+        else
+            echo -ne "\r⏳ Waiting for SSH ($attempt/10)..."
+            sleep 10
+        fi
+    done
+    
+    echo ""
+    echo "[WARNING] Could not setup TMATE automatically."
+    echo "[INFO] You can manually setup TMATE after SSH:"
+    echo "        ssh $USERNAME@localhost -p $SSH_PORT"
+    echo "        sudo apt install tmate"
+    echo "        tmate"
+    rm -f "$TMATE_FILE.tmp" 2>/dev/null
+    return 1
 }
 
 # Interactive Menu
@@ -137,19 +276,18 @@ show_menu() {
         echo "│  Disk Size: $DISK_SIZE"
         echo "│  SSH Port: $SSH_PORT"
         echo "│  Swap Size: $SWAP_SIZE"
-        echo "│  Environment: $(if [ $IS_FIREBASE -eq 1 ]; then echo 'Firebase'; else echo 'Local'; fi)"
         echo "└─────────────────────────────────────────────────────────────┘"
         echo ""
         echo "═══════════════════════ Main Menu ════════════════════════"
-        echo "1) 🚀 Start VM (Interactive Mode)"
-        echo "2) 🌙 Start VM (24/7 Background Mode)"
+        echo "1) 🚀 Start VM (Interactive Mode - SEE console)"
+        echo "2) 🌙 Start VM (24/7 Background Mode + TMATE SSH)"
         echo "3) ⚙️  Configure Custom Settings"
         echo "4) 📊 Check 24/7 Service Status"
-        echo "5) ⏹️  Stop 24/7 Service"
-        echo "6) 📋 View 24/7 Service Logs"
-        echo "7) 🛠️  Quick Settings Presets"
-        echo "8) 🚪 Exit to Terminal"
-        echo "9) 🔄 Restart 24/7 Service"
+        echo "5) 🔗 Get TMATE SSH URL"
+        echo "6) ⏹️  Stop 24/7 Service"
+        echo "7) 📋 View 24/7 Service Logs"
+        echo "8) 🛠️  Quick Settings Presets"
+        echo "9) 🚪 Exit to Terminal"
         echo ""
         
         read -p "Select option (1-9): " choice
@@ -161,8 +299,12 @@ show_menu() {
                 break
                 ;;
             2)
-                echo "[INFO] Starting 24/7 background service..."
+                echo "[INFO] Starting 24/7 background service with TMATE..."
                 firebase_service start
+                echo ""
+                echo "⚠️  IMPORTANT: Save your TMATE URL above!"
+                echo "   It works even after closing browser."
+                echo ""
                 read -p "Press any key to continue..."
                 ;;
             3)
@@ -173,25 +315,24 @@ show_menu() {
                 read -p "Press any key to continue..."
                 ;;
             5)
-                firebase_service stop
+                firebase_service tmate
                 read -p "Press any key to continue..."
                 ;;
             6)
-                firebase_service logs
+                firebase_service stop
+                read -p "Press any key to continue..."
                 ;;
             7)
-                quick_presets
+                # Set terminal size for logs view
+                printf '\033[8;40;120t' 2>/dev/null || true
+                firebase_service logs
                 ;;
             8)
-                echo "[INFO] Exiting to terminal..."
-                exit 0
+                quick_presets
                 ;;
             9)
-                echo "[INFO] Restarting 24/7 service..."
-                firebase_service stop
-                sleep 2
-                firebase_service start
-                read -p "Press any key to continue..."
+                echo "[INFO] Exiting to terminal..."
+                exit 0
                 ;;
             *)
                 echo "[ERROR] Invalid option!"
@@ -313,22 +454,14 @@ EOF
 # Load saved config
 load_config() {
     if [ -f "$VM_DIR/vm.config" ]; then
-        # Use safe source to avoid issues
-        if [ -r "$VM_DIR/vm.config" ]; then
-            while IFS='=' read -r key value; do
-                # Skip comments and empty lines
-                [[ $key =~ ^[[:space:]]*# ]] && continue
-                [[ -z $key ]] && continue
-                
-                # Remove quotes from value
-                value="${value%\"}"
-                value="${value#\"}"
-                
-                # Export variable
-                export "$key"="$value"
-            done < "$VM_DIR/vm.config"
-            echo "[INFO] Loaded saved configuration from $VM_DIR/vm.config"
-        fi
+        while IFS='=' read -r key value; do
+            [[ $key =~ ^[[:space:]]*# ]] && continue
+            [[ -z $key ]] && continue
+            value="${value%\"}"
+            value="${value#\"}"
+            export "$key"="$value"
+        done < "$VM_DIR/vm.config"
+        echo "[INFO] Loaded saved configuration from $VM_DIR/vm.config"
     fi
 }
 
@@ -346,7 +479,7 @@ parse_args() {
                 firebase_service "$2"
                 exit 0
             else
-                echo "Usage: $0 --service [start|stop|status|logs]"
+                echo "Usage: $0 --service [start|stop|status|tmate|logs]"
                 exit 1
             fi
             ;;
@@ -358,7 +491,13 @@ parse_args() {
             firebase_service status
             exit 0
             ;;
+        --tmate)
+            firebase_service tmate
+            exit 0
+            ;;
         --logs)
+            # Set terminal size for logs
+            printf '\033[8;40;120t' 2>/dev/null || true
             firebase_service logs
             exit 0
             ;;
@@ -367,7 +506,6 @@ parse_args() {
             exit 0
             ;;
         "")
-            # No arguments, continue normally
             ;;
         *)
             echo "Unknown option: $1"
@@ -379,10 +517,7 @@ parse_args() {
 
 # Show help
 show_help() {
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║                 QEMU-freeroot VM Manager                ║"
-    echo "║                  Firebase 24/7 Edition                  ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
+    show_banner
     echo ""
     echo "Usage: $0 [OPTION]"
     echo ""
@@ -390,23 +525,26 @@ show_help() {
     echo "  --menu, -m        Show interactive menu with ALBIN banner"
     echo "  --background, -b  Start VM in 24/7 background mode"
     echo "  --service, -s     Manage 24/7 Firebase service"
-    echo "                    [start|stop|status|logs]"
+    echo "                    [start|stop|status|tmate|logs]"
     echo "  --stop            Stop all running VM instances"
     echo "  --status          Check 24/7 service status"
+    echo "  --tmate           Get TMATE persistent SSH URL"
     echo "  --logs            View 24/7 service logs"
     echo "  --help, -h        Show this help message"
     echo ""
+    echo "Features:"
+    echo "  • 24/7 background operation"
+    echo "  • TMATE persistent SSH access"
+    echo "  • Interactive menu with Putty-like sizing"
+    echo "  • Customizable RAM/CPU/Disk settings"
+    echo "  • Quick presets for Gaming/Dev/Docker"
+    echo ""
     echo "Examples:"
-    echo "  $0                 # Start VM normally"
     echo "  $0 --menu          # Show interactive menu"
-    echo "  $0 --background    # Run in 24/7 background mode"
-    echo "  $0 --service start # Start 24/7 Firebase service"
+    echo "  $0 --service start # Start 24/7 with TMATE"
+    echo "  $0 --tmate         # Get persistent SSH URL"
     echo "  $0 --status        # Check if VM is running"
     echo ""
-    echo "Firebase Notes:"
-    echo "  - 24/7 mode uses nohup background processes"
-    echo "  - VM persists until explicitly stopped"
-    echo "  - SSH: ssh $USERNAME@localhost -p $SSH_PORT"
 }
 
 # =============================
@@ -446,7 +584,7 @@ if [ ! -f "$IMG_FILE" ]; then
     wget "$IMG_URL" -O "$IMG_FILE"
     qemu-img resize "$IMG_FILE" "$DISK_SIZE"
 
-    # Cloud-init setup for OpenSSH and Swap
+    # Cloud-init setup for OpenSSH and Swap with TMATE pre-install
     cat > user-data <<EOF
 #cloud-config
 hostname: $HOSTNAME
@@ -459,16 +597,26 @@ chpasswd:
   expire: false
 packages:
   - openssh-server
+  - curl
+  - gnupg
+  - software-properties-common
+  - screen
 runcmd:
   - echo "$USERNAME:$PASSWORD" | chpasswd
   - mkdir -p /var/run/sshd
-  - /usr/sbin/sshd -D &
-  # Swap file creation and activation
+  - systemctl start ssh
+  - systemctl enable ssh
+  # Swap file
   - fallocate -l $SWAP_SIZE /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
-  - echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # Pre-install tmate for faster access
+  - curl -fsSL https://packages.tmate.io/repository-key.asc | gpg --dearmor > /usr/share/keyrings/tmate.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/tmate.gpg] https://packages.tmate.io/ubuntu/ jammy main" > /etc/apt/sources.list.d/tmate.list
+  - apt-get update
+  - apt-get install -y tmate
     
 growpart:
   mode: auto
@@ -483,7 +631,7 @@ local-hostname: $HOSTNAME
 EOF
 
     cloud-localds "$SEED_FILE" user-data meta-data
-    echo "[INFO] VM image setup complete with OpenSSH and Swap!"
+    echo "[INFO] VM image setup complete with OpenSSH, Swap and TMATE pre-installed!"
 else
     echo "[INFO] VM image exists, skipping download..."
 fi
@@ -534,8 +682,8 @@ if [ -z "${BACKGROUND_MODE:-}" ] && [ -z "${INTERACTIVE_MODE:-}" ]; then
     echo "Swap Size: $SWAP_SIZE"
     echo "═══════════════════════════════════════════════════"
     echo ""
-    echo "[TIP] Use './vm.sh --menu' for interactive menu"
-    echo "[TIP] Use './vm.sh --service start' for 24/7 mode"
+    echo "⚠️  For 24/7 with TMATE: ./vm.sh --menu (choose 2)"
+    echo "⚠️  For TMATE URL later: ./vm.sh --tmate"
     echo ""
     read -n1 -r -p "Press any key to start VM..."
 fi
@@ -556,16 +704,25 @@ QEMU_CMD="qemu-system-x86_64 \
 # Add daemonize flag for background mode
 if [ -n "${BACKGROUND_MODE:-}" ]; then
     QEMU_CMD="$QEMU_CMD -daemonize"
+    # Set terminal size for Putty-like experience
+    printf '\033[8;24;80t' 2>/dev/null || true
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║                  24/7 VM STARTING...                    ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
     echo "[INFO] Starting VM in 24/7 Firebase background mode..."
-    echo "[INFO] VM will continue running even when you close browser"
-    echo "[INFO] SSH: ssh $USERNAME@localhost -p $SSH_PORT"
-    echo "[INFO] Use './vm.sh --status' to check if it's running"
-    echo "[INFO] Use './vm.sh --stop' to stop it"
+    echo "[INFO] Will auto-install TMATE for persistent access"
+    echo "[INFO] This takes 2-3 minutes for first boot..."
+    echo ""
     eval $QEMU_CMD
-    echo "[SUCCESS] VM is now running in 24/7 background mode!"
+    echo "[SUCCESS] VM is now starting in 24/7 background mode!"
+    echo "[INFO] Run './vm.sh --tmate' in 3 minutes to get SSH URL"
+    echo "[INFO] Or './vm.sh --status' to check progress"
     exit 0
 else
-    echo "[INFO] Starting VM..."
+    # Set terminal size for interactive mode
+    printf '\033[8;40;120t' 2>/dev/null || true
+    echo "[INFO] Starting VM in interactive mode..."
     exec qemu-system-x86_64 \
         $ACCELERATION_FLAG \
         -m "$MEMORY" \
