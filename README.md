@@ -1,23 +1,43 @@
-# QEMU-freeroot - Firebase Edition
-## Create isolated Ubuntu VMs with 24/7 background operation
+# QEMU-freeroot
+## QEMU-freeroot is a script to create a isolated ubuntu system (Same as freeroot)
 
-## ✨ New Firebase Features
-- **24/7 Background Operation** - VM runs continuously even when browser is closed
-- **Interactive ALBIN Banner Menu** - Beautiful terminal interface
-- **Firebase-compatible** - Works in Firebase/Cloud environments
-- **No Systemd Required** - Uses lightweight background processes
+## How to use
+1. Install QEMU
 
-## 🚀 Quick Start
+Arch: `sudo pacman -S qemu`
+
+Debian/Ubuntu: `sudo apt install qemu qemu-kvm`
+
+Fedora: `sudo dnf install @virtualization`
+
+Gentoo: `sudo emerge --ask app-emulation/qemu`
+
+RHEL/CentOS: `sudo yum install qemu-kvm`
+
+SUSE: `sudo zypper install qemu`
+
+Google Firebase Studio: copy the `googlefirebasestudio/dev.nix` file and paste it
+
+2. Clone the repo
+
+`git clone https://github.com/BlackCatOfficialytb/QEMU-freeroot.git`
+
+3. Run vm.sh
+
 ```bash
-# Clone the repository
-git clone https://github.com/Albin123725/vps.git
-cd vps
+cd QEMU-freeroot
+sh vm.sh
+# or
+bash vm.sh
+``` 
 
-# Make scripts executable
-chmod +x *.sh
+## Optional tools
 
-# Start interactive menu (Recommended)
-./vm.sh --menu
+We have tar.gz to qcow2 (still functional but not implemented in vm.sh yet): targztoqcow2.sh
 
-# Or start 24/7 background service
-./vm.sh --service start
+Soon add pre-built QEMU for Linux for full freeroot-like
+
+## Videos: https://www.youtube.com/watch?v=PPJWx2UnQQE
+Copyright: 
+Codes: GPL-3.0 with credits
+Video: CC BY-SA 4.0
